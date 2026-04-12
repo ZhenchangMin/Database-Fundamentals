@@ -253,3 +253,59 @@ SELECT Sname, Sdept, Sage FROM Student WHERE Sage BETWEEN 20 AND 23;
 -- 集合查询
 SELECT Sname, Ssex FROM Student WHERE Sdept IN ('CS','MA','IS');
 ```
+
+### 3.4.4 单表查询
+
+#### 选择表中的若干列
+```sql
+SELECT Sname, Sdept FROM Student;
+SELECT * FROM Student; -- 选全部列
+SELECT Sname, 2026 - Sage /*假设当时为2026年*/
+FROM Student;
+```
+![1775986209776](image/lec3SQL/1775986209776.png)
+![1775996551907](image/lec3SQL/1775996551907.png)
+![1775997868069](image/lec3SQL/1775997868069.png)
+给这个字符串列取了个别名叫出生年份，因为是常量，所以结果表中这一列的值都是一样的
+
+#### 选择表中的若干元组
+![1775997947184](image/lec3SQL/1775997947184.png)
+![1775998475821](image/lec3SQL/1775998475821.png)
+![1775998499259](image/lec3SQL/1775998499259.png)
+![1775998513908](image/lec3SQL/1775998513908.png)
+![1775998522191](image/lec3SQL/1775998522191.png)
+![1775998676114](image/lec3SQL/1775998676114.png)
+![1775998686092](image/lec3SQL/1775998686092.png)
+![1775998704347](image/lec3SQL/1775998704347.png)
+![1775998761862](image/lec3SQL/1775998761862.png)
+![1775998804516](image/lec3SQL/1775998804516.png)
+![1775998827434](image/lec3SQL/1775998827434.png)
+![1776002199665](image/lec3SQL/1776002199665.png)
+
+#### 聚集函数
+![1776002279630](image/lec3SQL/1776002279630.png)
+![1776002312806](image/lec3SQL/1776002312806.png)
+![1776003319161](image/lec3SQL/1776003319161.png)
+![1776006263586](image/lec3SQL/1776006263586.png)
+
+#### 对查询结果分组
+GROUP BY 子句将查询结果按照指定列进行分组，常与聚集函数一起使用
+```sql
+SELECT Sdept, COUNT(*) AS num_students
+FROM Student
+GROUP BY Sdept;
+```
+按指定的一列或多列值分组，值相等的为一‘组’
+对查询结果分组后，**聚集函数**将分别作用于每个‘组’，在SELECT子句中对每一个‘组’分别进行统计计算，实现分类统计查询
+
+HAVING 子句用于对分组后的结果进行过滤，常与 GROUP BY 子句一起使用
+```sql
+SELECT Sdept, COUNT(*) AS num_students
+FROM Student
+GROUP BY Sdept
+HAVING COUNT(*) > 10; -- 只显示学生人数超过10的系
+```
+根据GROUP BY子句的分组结果，定义分组选择条件
+● 在HAVING子句中给出的查询条件是定义在分组后的‘组’（元组集合）上的，通常是根据某种统计计算的结果来定义‘组’的选择条件
+● 只有满足条件group_condition的‘组’才会被保留下来，用于生成最终的查询结果
+
