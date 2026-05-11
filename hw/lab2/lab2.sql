@@ -1,0 +1,361 @@
+###########################################
+# 实验2：数据定义与数据操纵（命令脚本）
+# （2026春季，智能软件与工程学院）
+# 说明：命令脚本请使用TXT格式提交，截止日期：2026.05.12
+###########################################
+# 请在以下空白处填写你的学号和姓名
+# 学号：241880334   
+# 姓名：闵振昌                    
+###########################################
+
+################## （实验2）SQL命令脚本 #########################
+/*  第一部分：数据库创建  */ 
+use mysql;
+drop schema if exists myschool26;
+create schema myschool26 charset gb2312 collate gb2312_bin;
+use myschool26;
+
+create table students(
+	sno char(9) not null,
+    sname char(20) not null,
+    ssex char(2) not null,
+    birthday date not null,
+    dept char(20),
+    enrolldate date,
+    primary key (sno),
+    check (ssex in ('男', '女'))
+);
+
+create table teachers(
+    tno char(9) not null,
+    tname char(20) not null,
+    dept char(20),
+    primary key (tno)
+);
+
+create table courses(
+    cno char(8) not null,
+    cname char(40) not null,
+    credit int not null,
+    chours int not null,
+    dept char(20),
+    primary key (cno),
+    check (credit > 0 and credit < 10)
+);
+
+create table courseclass(
+    clsno char(8) not null,
+    cno char(8) not null,
+    tno char(9),
+    clsyear int not null,
+    clsterm char(4) not null,
+    primary key (clsno),
+    check (clsterm in ('春季', '秋季', '暑期')),
+    foreign key (cno) references courses(cno)
+        on update cascade
+        on delete restrict,
+    foreign key (tno) references teachers(tno)
+        on update cascade
+        on delete set null
+);
+
+create table enrollment(
+    sno char(9) not null,
+    clsno char(8) not null,
+    grade int,
+    primary key (sno, clsno),
+    foreign key (sno) references students(sno)
+        on update cascade
+        on delete restrict,
+    foreign key (clsno) references courseclass(clsno)
+        on update cascade
+        on delete restrict,
+    check (grade >= 0 and grade <= 100)
+);
+
+
+/*  第二部分：初始数据加载（不需要提交）  */
+/*  第三部分：数据查询  */
+select cno, cname, dept
+from courses
+where cname like '%数%' -- 包含“数”字的课程
+order by dept asc, cno asc;
+
+select sno, sname, dept
+from students
+where sname like '_静%' -- 名字第二个字是“静”的学生，'_'表示任意一个字符（不是字节）
+-- 虽然中文是2个字节，但是_匹配一个字符。%匹配任意长度的字符串（包括空字符串）
+order by sname asc;
+
+select s.sno, s.sname, c.cno, c.cname
+from enrollment e
+join students s on e.sno = s.sno -- 必须要join，因为sname这些值在enrollment表里没有，必须要连接到students表才能获取
+-- on后面是连接条件，表示enrollment表的sno和students表的sno相等时才连接
+join courseclass  cc on e.clsno = cc.clsno
+join courses c on cc.cno = c.cno
+where e.grade is null
+order by c.cno asc, s.sno asc;
+
+select s.sno, s.sname, 
+       count(*) as course_count, -- 统计每个学生选了多少门课程，直接用*就行，因为每一行代表选了一门课了
+       sum(c.credit) as total_credits, -- 统计每个学生选了多少学分，sum函数会自动忽略null值，所以不需要在where里加grade is not null的条件了
+       avg(e.grade) as avg_grade
+from enrollment e
+join students s on e.sno = s.sno
+join courseclass  cc on e.clsno = cc.clsno
+join courses c on cc.cno = c.cno
+where year(s.enrolldate) = 2023
+  and e.grade is not null
+group by s.sno
+having min(e.grade) >= 60 -- 这里不能放到where里，因为where是在分组前过滤数据的，而having是在分组后过滤数据的，只有分组后才能计算每个学生的最低成绩
+-- 聚合函数不能直接在where里使用，必须要在group by后面使用having来过滤分组后的结果
+order by s.sno asc;
+
+select t.tno, t.tname, 
+count(*) as courseclass_cnt, 
+sum(c.chours) as total_hours
+from courseclass cc
+join teachers t on cc.tno = t.tno
+join courses c on cc.cno = c.cno
+where cc.tno is not null
+group by t.tno
+order by total_hours desc, t.tno asc;
+
+select left(sname, 1) as surname, count(*) as surname_count -- 用left函数获取姓氏，统计每个姓氏的人数
+from students
+group by surname
+order by surname_count desc, surname asc;
+
+select s.dept, s.sno, s.sname
+from students s
+where year(s.enrolldate) = 2021
+and exists (
+    select * from courses c
+    where c.dept = s.dept
+    and not exists ( -- 双重exists，表示存在一个本学院开设的课程没及格
+        select * from enrollment e
+        join courseclass cc on cc.clsno = e.clsno
+        where e.sno = s.sno
+        and cc.cno = c.cno
+        and e.grade >= 60
+    )
+)
+order by s.dept asc, s.sno asc;
+
+select s.dept, s.sno, s.sname
+from students s
+where year(s.enrolldate) = 2021
+and not exists ( -- 就是加一个not
+    select * from courses c
+    where c.dept = s.dept
+    and not exists (
+        select * from enrollment e
+        join courseclass cc on cc.clsno = e.clsno
+        where e.sno = s.sno
+        and cc.cno = c.cno
+        and e.grade >= 60
+    )
+)
+order by s.dept asc, s.sno asc;
+
+select t.tno, t.tname, t.dept, 
+	min(year(cc.clsyear)) as first_year, -- 天然保留null值，表示没有开过课的教师
+	max(year(cc.clsyear)) as last_year
+from teachers t
+left join courseclass cc on t.tno = cc.tno -- 如果不用left join，则无法统计没有开课的教师，也就无法保留空值
+group by t.tno
+order by t.dept asc, t.tno asc;
+
+select c.cno, c.cname, cc.clsno, cc.clsyear, cc.clsterm
+from courseclass cc
+join courses c on cc.cno = c.cno
+join (
+    select clsno, avg(grade) as cls_avg
+    from enrollment
+    where grade is not null
+    group by clsno
+) ca on ca.clsno = cc.clsno -- classnumber and avarage grade for each class
+where ca.cls_avg = (
+    select max(sub.cls_avg)
+    from (
+        select cc2.cno, avg(e2.grade) as cls_avg
+        from enrollment e2
+        join courseclass cc2 on e2.clsno = cc2.clsno
+        where e2.grade is not null
+        group by cc2.clsno, cc2.cno
+    ) sub
+    where sub.cno = cc.cno -- 限制是同一个课程的不同班级之间比较平均成绩，sub是一个临时表，统计了每个班级的平均成绩，然后在外层查询中找出每个课程的最高平均成绩
+)
+order by c.cno asc, cc.clsyear desc;
+
+
+/*  第四部分：数据更新  */
+set autocommit=0;
+insert into courseclass values('2513208','3208', '704', '2025', '秋季');
+
+insert into enrollment(sno, clsno, grade)
+select sno, '2513208', null
+from students 
+where dept = '计算机学院' and year(enrolldate) = 2024;
+
+COMMIT;
+
+select s.sno, s.dept as student_dept, c.cname, c.dept as course_dept, t.tname, cc.clsyear, cc.clsterm
+from enrollment e
+join students s on e.sno = s.sno
+join courseclass cc on e.clsno = cc.clsno
+join courses c on cc.cno = c.cno
+left join teachers t on cc.tno = t.tno
+where e.grade is NULL
+order by s.sno, c.cno;
+
+
+set autocommit=0;
+update enrollment 
+set grade = 68
+where sno = '211210166' and clsno = '2111202';
+
+select s.sno, s.sname, s.dept
+from students s
+where year(s.enrolldate) = 2021
+    and not exists(
+        select * from courses c
+        where c.dept = '计算机学院'
+        and not exists(
+            select * from enrollment e
+            join courseclass cc on e.clsno = cc.clsno
+            where e.sno = s.sno
+            and cc.cno = c.cno
+            and e.grade >= 60
+        )
+    )
+order by s.sno;
+
+ROLLBACK;
+
+update enrollment
+join students s on enrollment.sno = s.sno
+join courseclass cc on enrollment.clsno = cc.clsno
+join courses c on cc.cno = c.cno
+set grade = NULL
+where c.dept != s.dept;
+
+ROLLBACK;
+
+set autocommit=0;
+delete from enrollment
+where clsno in (
+    select clsno from courseclass
+    where cno in (
+        select cno from courses
+        where cname = '人工智能导论' and dept = '计算机学院'
+    )
+);
+delete from courseclass
+where cno in (
+    select cno from courses
+    where cname = '人工智能导论' and dept = '计算机学院'
+);
+delete from courses
+where cname = '人工智能导论' and dept = '计算机学院';
+
+ROLLBACK;
+
+delete from enrollment
+where clsno = '2513208';
+
+delete from courseclass
+where clsno = '2513208';
+
+COMMIT;
+
+
+
+
+/*  第五部分：视图创建与访问  */
+create view avg_course_grade(cno, total_students, avg_grade) as
+select cc.cno, count(*) as total_students, avg(e.grade) as avg_grade
+from courseclass cc
+left join enrollment e on cc.clsno = e.clsno
+where e.grade is not null
+group by cc.cno;
+
+create view total_course_students(cno, total_students, num_greater_avg_grade) as
+select cc.cno, 
+    count(*) as total_students,
+    sum(case when e.grade > acg.avg_grade then 1 else 0 end) as num_greater_avg_grade
+from courseclass cc
+left join enrollment e on cc.clsno = e.clsno
+left join avg_course_grade acg on cc.cno = acg.cno
+group by cc.cno;
+
+select c.cno, c.cname, c.dept
+from courses c
+join courseclass cc on c.cno = cc.cno
+join enrollment e on cc.clsno = e.clsno
+join avg_course_grade acg on c.cno = acg.cno
+where e.grade is not null
+group by c.cno, c.cname, c.dept, acg.total_students
+having sum(case when e.grade < acg.avg_grade then 1 else 0 end) * 2> acg.total_students 
+order by c.dept asc, c.cno asc;
+
+
+create view failing_enrollments(sno, sname, dept, cno, clsno, grade) as
+select s.sno, s.sname, s.dept, c.cno, cc.clsno, e.grade
+from enrollment e
+join students s on e.sno = s.sno
+join courseclass cc on e.clsno = cc.clsno
+join courses c on cc.cno = c.cno
+where e.grade is null or e.grade < 60
+with check option;
+
+select sno, sname, dept, cno, clsno, grade
+from failing_enrollments;
+
+set autocommit=0;
+
+
+select * 
+from failing_enrollments 
+where grade is not null and grade < 60 limit 1;
+
+update failing_enrollments
+set grade = 60
+where sno = '20210001' and clsno = 'C001-01';
+
+ROLLBACK;
+
+
+update enrollment e
+set grade = 70
+where sno = '211210088' and clsno = '2212106';
+select sno, sname, dept, cno, clsno, grade
+from failing_enrollments;
+
+ROLLBACK;
+
+
+update enrollment e
+set grade = 50
+where sno = '211210088' and clsno = '2212106';
+
+update enrollment
+set grade = null
+where grade is not null
+  and grade < 60
+  and clsno in (
+      select cc.clsno
+      from courseclass cc
+      join courses c on cc.cno = c.cno
+      where c.cname = '数据结构'
+);
+
+select sno, sname, dept, cno, clsno, grade
+from failing_enrollments;
+
+ROLLBACK;
+
+drop view if exists avg_course_grade;
+drop view if exists total_course_students;
+drop view if exists failing_enrollments;
+################## （实验2）脚本结束 #########################
